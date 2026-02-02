@@ -41,10 +41,10 @@ def check_url(row):
     
     return result
 
-st.set_page_config(page_title="Job Spy Search", page_icon="🔍", layout="wide")
+st.set_page_config(page_title="Job Hunt", page_icon="🎯", layout="wide")
 
-st.title("🔍 Job Spy Search")
-st.markdown("Search for jobs across multiple platforms (Indeed, LinkedIn, Glassdoor, etc.)")
+st.title("🎯 Job Hunt")
+st.markdown("Aggregated job search across Indeed, LinkedIn, Glassdoor, and more.")
 
 # Sidebar Configuration
 st.sidebar.header("Search Parameters")
