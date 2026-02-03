@@ -3,15 +3,17 @@ from jobspy import scrape_jobs
 import pandas as pd
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import company_monitor
+import yaml
 
 def check_url(row):
     """Check if the direct application URL returns a valid response."""
-    direct_url = row.get('job_url_direct')
+    direct_url = row.get('job_url') # We check the main URL now
     
     result = {'index': row.name, 'status': None, 'url_to_use': None}
     
     if pd.isna(direct_url) or not direct_url:
-        result['status'] = 'Missing Direct Link'
+        result['status'] = 'Missing Link'
         return result
 
     headers = {
@@ -27,7 +29,7 @@ def check_url(row):
         error_keywords = ['error', 'expired', 'notfound', 'job-closed', 'job_closed']
         
         if any(keyword in final_url_lower for keyword in error_keywords):
-            result['status'] = 'Job Unavailable (Redirected)'
+            result['status'] = 'Unavailable (Redirected)'
             result['url_to_use'] = resp.url
         elif resp.status_code == 200:
             result['status'] = '200 OK'
@@ -36,7 +38,7 @@ def check_url(row):
             result['status'] = f"Status {resp.status_code}"
             result['url_to_use'] = resp.url
             
-    except Exception as e:
+    except Exception:
         result['status'] = 'Error'
     
     return result
@@ -44,74 +46,58 @@ def check_url(row):
 st.set_page_config(page_title="Job Hunt", page_icon="🎯", layout="wide")
 
 st.title("🎯 Job Hunt")
-st.markdown("Aggregated job search across Indeed, LinkedIn, Glassdoor, and more.")
 
-# Sidebar Configuration
-st.sidebar.header("Search Parameters")
+# Create Tabs
+tab1, tab2 = st.tabs(["Global Search", "Dream Company Watchlist"])
 
-search_term = st.sidebar.text_input(
-    "Job Title / Keywords", 
-    value="research scientist",
-    help="Enter multiple job titles separated by commas (e.g., 'Software Engineer, Data Scientist'). logic: (Term A) OR (Term B)."
-)
-location = st.sidebar.text_input("Location", value="Georgia")
+with tab1:
+    st.markdown("Search **Indeed, LinkedIn, Glassdoor** AND your **ATS Targets** (Greenhouse/Lever) simultaneously.")
 
-site_options = ["indeed", "linkedin", "glassdoor", "ziprecruiter"]
-sites = st.sidebar.multiselect("Sites to Scrape", options=site_options, default=["indeed", "linkedin"])
+    # Sidebar Configuration (Global Search specific)
+    with st.sidebar:
+        st.header("Search Parameters")
+        search_term = st.text_input(
+            "Job Title / Keywords", 
+            value="research scientist",
+            help="Enter multiple job titles separated by commas."
+        )
+        location = st.text_input("Location", value="Georgia")
 
-max_results = st.sidebar.number_input("Max Results (per site)", min_value=1, max_value=1000, value=20)
+        site_options = ["indeed", "linkedin", "glassdoor", "ziprecruiter"]
+        sites = st.multiselect("Sites to Scrape", options=site_options, default=["indeed", "linkedin"])
 
-days_old = st.sidebar.number_input("Days Old", min_value=1, max_value=30, value=7)
-hours_old = days_old * 24
+        max_results = st.number_input("Max Results (per site)", min_value=1, max_value=1000, value=20)
 
-job_type_options = ["fulltime", "parttime", "contract", "internship", "temporary"]
-job_types = st.sidebar.multiselect("Job Type", options=job_type_options, default=[])
+        days_old = st.number_input("Days Old", min_value=1, max_value=30, value=7)
+        hours_old = days_old * 24
 
-is_remote = st.sidebar.checkbox("Remote Only", value=False)
+        job_type_options = ["fulltime", "parttime", "contract", "internship", "temporary"]
+        job_types = st.multiselect("Job Type", options=job_type_options, default=[])
 
-st.sidebar.markdown("---")
-verify_links = st.sidebar.checkbox("Verify Direct Links", value=False, help="Check if the direct application links are valid (takes longer).")
+        is_remote = st.checkbox("Remote Only", value=False)
+        st.markdown("---")
+        include_ats = st.checkbox("Include ATS Targets", value=True, help="Also search companies listed in 'ats_companies' in companies.yaml")
+        auto_add = st.checkbox("Auto-Add New Companies", value=True, help="Automatically add any Greenhouse/Lever companies found in search results to your monitoring list.")
+        verify_links = st.checkbox("Verify Links", value=False, help="Check if the links are still valid (takes longer).")
 
-# Main Search Logic
-if st.button("Search Jobs", type="primary"):
-    if not sites:
-        st.error("Please select at least one site to scrape.")
-    else:
-        with st.spinner(f"Searching for '{search_term}' in '{location}'..."):
-            try:
-                # Handle Multiple Search Terms (split by comma)
-                search_terms = [t.strip() for t in search_term.split(',') if t.strip()]
-                if not search_terms:
-                    search_terms = [""] # Fallback if empty
+    # Main Search Logic
+    if st.button("Search Jobs", type="primary", key="global_search_btn"):
+        if not sites:
+            st.error("Please select at least one site to scrape.")
+        else:
+            with st.spinner(f"Searching for '{search_term}'..."):
+                try:
+                    search_terms = [t.strip() for t in search_term.split(',') if t.strip()]
+                    if not search_terms:
+                        search_terms = [""] 
 
-                combined_results = []
-                
-                # Progress container
-                status_text = st.empty()
-                
-                for term in search_terms:
-                    # Handle Job Type Multi-select (Nested Loop)
-                    if not job_types:
-                        # Search for Term + Any Job Type
-                        status_text.text(f"Searching for '{term}'...")
-                        try:
-                            result = scrape_jobs(
-                                site_name=sites,
-                                search_term=term,
-                                location=location,
-                                results_wanted=max_results,
-                                hours_old=hours_old,
-                                job_type=None,
-                                is_remote=is_remote,
-                                country_indeed='USA',
-                            )
-                            combined_results.append(result)
-                        except Exception as inner_e:
-                            st.warning(f"Error scraping for term '{term}': {inner_e}")
-                    else:
-                        # Search for Term + Specific Job Types
-                        for j_type in job_types:
-                            status_text.text(f"Searching for '{term}' ({j_type})...")
+                    combined_results = []
+                    status_text = st.empty()
+                    
+                    # 1. JobSpy Search
+                    for term in search_terms:
+                        if not job_types:
+                            status_text.text(f"Scraping Job Boards for '{term}'...")
                             try:
                                 result = scrape_jobs(
                                     site_name=sites,
@@ -119,93 +105,239 @@ if st.button("Search Jobs", type="primary"):
                                     location=location,
                                     results_wanted=max_results,
                                     hours_old=hours_old,
-                                    job_type=j_type,
+                                    job_type=None,
                                     is_remote=is_remote,
                                     country_indeed='USA',
                                 )
                                 combined_results.append(result)
                             except Exception as inner_e:
-                                st.warning(f"Error scraping for term '{term}' / type '{j_type}': {inner_e}")
-                
-                status_text.empty() # Clear status
-                
-                if combined_results:
-                    jobs = pd.concat(combined_results, ignore_index=True)
-                    # Remove duplicates that might appear (e.g. same job found in both searches)
-                    jobs = jobs.drop_duplicates(subset=['job_url'], keep='first')
-                else:
-                    jobs = pd.DataFrame()
+                                st.warning(f"JobSpy error for '{term}': {inner_e}")
+                        else:
+                            for j_type in job_types:
+                                status_text.text(f"Scraping Job Boards for '{term}' ({j_type})...")
+                                try:
+                                    result = scrape_jobs(
+                                        site_name=sites,
+                                        search_term=term,
+                                        location=location,
+                                        results_wanted=max_results,
+                                        hours_old=hours_old,
+                                        job_type=j_type,
+                                        is_remote=is_remote,
+                                        country_indeed='USA',
+                                    )
+                                    combined_results.append(result)
+                                except Exception as inner_e:
+                                    st.warning(f"JobSpy error for '{term}' / type '{j_type}': {inner_e}")
+                    
+                    # 2. ATS Direct Search
+                    if include_ats:
+                        status_text.text("Scanning ATS Targets (Greenhouse/Lever)...")
+                        try:
+                            ats_results = company_monitor.scrape_ats_companies(keyword_filter=search_term)
+                            if not ats_results.empty:
+                                combined_results.append(ats_results)
+                        except Exception as e:
+                            st.warning(f"ATS Search Error: {e}")
 
-                if jobs.empty:
-                    st.warning("No jobs found with the current parameters.")
-                else:
-                    st.success(f"Found {len(jobs)} jobs!")
+                    status_text.empty()
                     
-                    # Optional Link Verification
-                    if verify_links:
-                        st.info("Verifying links... this may take a moment.")
-                        progress_bar = st.progress(0)
-                        results = []
-                        total_jobs = len(jobs)
-                        
-                        # Reset index to ensure it matches
-                        jobs = jobs.reset_index(drop=True)
-                        
-                        with ThreadPoolExecutor(max_workers=10) as executor:
-                            futures = {executor.submit(check_url, row): idx for idx, row in jobs.iterrows()}
-                            completed_count = 0
-                            
-                            for future in as_completed(futures):
-                                results.append(future.result())
-                                completed_count += 1
-                                progress_bar.progress(completed_count / total_jobs)
-                        
-                        if results:
-                            url_df = pd.DataFrame(results).set_index('index')
-                            jobs['url_status'] = url_df['status']
-                            jobs['best_url'] = url_df['url_to_use']
-                    
-                    # Display Results
-                    display_cols = [
-                        'title', 'company', 'location', 'date_posted', 'job_type', 
-                        'interval', 'min_amount', 'max_amount', 'is_remote', 
-                        'emails', 'site', 'job_url'
-                    ]
-                    
-                    # Add Direct URL column - prefer verified one if available
-                    if 'best_url' in jobs.columns:
-                        display_cols.append('best_url')
-                        url_col_name = 'best_url'
+                    if combined_results:
+                        jobs = pd.concat(combined_results, ignore_index=True)
+                        jobs = jobs.drop_duplicates(subset=['job_url'], keep='first')
                     else:
-                        display_cols.append('job_url_direct')
-                        url_col_name = 'job_url_direct'
+                        jobs = pd.DataFrame()
 
-                    # Add url_status if verification was performed
-                    if verify_links and 'url_status' in jobs.columns:
-                        display_cols.append('url_status')
-                    
-                    # Ensure columns exist before selecting
-                    existing_cols = [c for c in display_cols if c in jobs.columns]
-                    
+                    if jobs.empty:
+                        st.warning("No jobs found with the current parameters.")
+                    else:
+                        st.success(f"Found {len(jobs)} jobs!")
+                        
+                        # 4. Optional Link Verification
+                        if verify_links:
+                            st.info("Verifying links... this may take a moment.")
+                            progress_bar = st.progress(0)
+                            results = []
+                            total_jobs = len(jobs)
+                            jobs = jobs.reset_index(drop=True)
+                            
+                            with ThreadPoolExecutor(max_workers=10) as executor:
+                                futures = {executor.submit(check_url, row): idx for idx, row in jobs.iterrows()}
+                                completed_count = 0
+                                for future in as_completed(futures):
+                                    results.append(future.result())
+                                    completed_count += 1
+                                    progress_bar.progress(completed_count / total_jobs)
+                            
+                            if results:
+                                url_df = pd.DataFrame(results).set_index('index')
+                                jobs['url_status'] = url_df['status']
+                                jobs['best_url'] = url_df['url_to_use'] # Store the real URL
+
+                        # 3. Auto-Discovery Logic (moved after verification to use better URLs)
+                        if auto_add:
+                            # Use the verified 'best_url' if available, otherwise fallback to 'job_url'
+                            # We create a temporary column to feed the detector
+                            jobs_for_discovery = jobs.copy()
+                            if 'best_url' in jobs_for_discovery.columns:
+                                # Prioritize best_url, fill missing with job_url
+                                jobs_for_discovery['job_url'] = jobs_for_discovery['best_url'].fillna(jobs_for_discovery['job_url'])
+                            
+                            new_count = company_monitor.auto_add_companies(jobs_for_discovery)
+                            if new_count > 0:
+                                st.toast(f"✨ Auto-discovered {new_count} new ATS companies for your watchlist!", icon="🚀")
+
+                        display_cols = [
+                            'title', 'company', 'location', 'date_posted', 'job_type', 
+                            'interval', 'min_amount', 'max_amount', 'is_remote', 
+                            'emails', 'site', 'job_url', 'source'
+                        ]
+                        
+                        if verify_links and 'url_status' in jobs.columns:
+                            display_cols.append('url_status')
+                            if 'best_url' in jobs.columns:
+                                display_cols.append('best_url') # Show the direct link column if we have it
+                        
+                        # Add 'source' col if not present
+                        if 'source' not in jobs.columns:
+                            jobs['source'] = 'Job Board'
+
+                        existing_cols = [c for c in display_cols if c in jobs.columns]
+                        
+                        st.dataframe(
+                            jobs[existing_cols],
+                            column_config={
+                                "job_url": st.column_config.LinkColumn("Apply Link", display_text="View Posting"),
+                            },
+                            use_container_width=True
+                        )
+                        
+                        csv = jobs.to_csv(index=False).encode('utf-8')
+                        st.download_button(
+                            label="Download Results as CSV",
+                            data=csv,
+                            file_name='job_search_results.csv',
+                            mime='text/csv',
+                        )
+                except Exception as e:
+                    st.error(f"An error occurred: {e}")
+
+with tab2:
+    st.header("Dream Company Watchlist")
+    
+    # Load config first for all sections
+    config = {}
+    try:
+        with open("companies.yaml", "r") as f:
+            config = yaml.safe_load(f)
+    except Exception as e:
+        st.error(f"Could not load companies.yaml: {e}")
+
+    # --- New Aggregator Monitor Section ---
+    st.divider()
+    st.subheader("Active Company Monitoring (via Indeed/LinkedIn/Glassdoor)")
+    st.markdown("Use this to watch companies that don't have public ATS boards (e.g., Boehringer Ingelheim). We search job aggregators for them specifically.")
+    
+    # Display current monitored list as an editable table
+    agg_companies = config.get('aggregator_companies', [])
+    
+    if agg_companies:
+        df_agg = pd.DataFrame(agg_companies)
+        # Convert list of keywords to comma-separated string for editing
+        if 'keywords' in df_agg.columns:
+            df_agg['keywords'] = df_agg['keywords'].apply(lambda x: ', '.join(x) if isinstance(x, list) else str(x))
+        else:
+            df_agg['keywords'] = ""
+
+        edited_df = st.data_editor(
+            df_agg,
+            column_config={
+                "name": "Company Name",
+                "search_term": "Search Query",
+                "location": "Location",
+                "keywords": "Highlight Keywords (comma sep)"
+            },
+            use_container_width=True,
+            num_rows="dynamic", # Allow adding/deleting rows
+            key="agg_editor"
+        )
+        
+        if st.button("Save Changes", type="primary", key="save_agg_changes"):
+            # Convert back to list format and save
+            cleaned_companies = []
+            for index, row in edited_df.iterrows():
+                if row['name']: # specific check to ensure empty rows aren't saved
+                    keywords_list = [k.strip() for k in str(row['keywords']).split(',') if k.strip()]
+                    cleaned_companies.append({
+                        "name": row['name'],
+                        "search_term": row['search_term'],
+                        "location": row['location'],
+                        "keywords": keywords_list
+                    })
+            
+            config['aggregator_companies'] = cleaned_companies
+            with open("companies.yaml", "w") as f:
+                yaml.dump(config, f, sort_keys=False)
+            
+            st.toast("Watchlist updated successfully!", icon="💾")
+            st.rerun()
+
+    else:
+        st.info("No companies configured. Add one below!")
+        # Initialize empty df for the editor if list is empty, so user can add rows
+        empty_df = pd.DataFrame(columns=["name", "search_term", "location", "keywords"])
+        edited_df = st.data_editor(
+            empty_df,
+            column_config={
+                "name": "Company Name",
+                "search_term": "Search Query",
+                "location": "Location",
+                "keywords": "Highlight Keywords (comma sep)"
+            },
+            use_container_width=True,
+            num_rows="dynamic",
+            key="agg_editor_empty"
+        )
+        if st.button("Save Changes", type="primary", key="save_agg_changes_empty"):
+             # Convert back to list format and save
+            cleaned_companies = []
+            for index, row in edited_df.iterrows():
+                if row['name']:
+                    keywords_list = [k.strip() for k in str(row['keywords']).split(',') if k.strip()]
+                    cleaned_companies.append({
+                        "name": row['name'],
+                        "search_term": row['search_term'],
+                        "location": row['location'],
+                        "keywords": keywords_list
+                    })
+            
+            config['aggregator_companies'] = cleaned_companies
+            with open("companies.yaml", "w") as f:
+                yaml.dump(config, f, sort_keys=False)
+            st.toast("Watchlist updated successfully!", icon="💾")
+            st.rerun()
+
+
+    if st.button("Scan Aggregators Now", type="secondary", key="agg_monitor_btn"):
+        with st.spinner("Scanning aggregators for target companies..."):
+            try:
+                agg_jobs = company_monitor.scrape_aggregator_companies()
+                
+                if agg_jobs.empty:
+                    st.info("No new jobs found for these companies in the last 24h.")
+                else:
+                    st.success(f"Found {len(agg_jobs)} recent jobs!")
                     st.dataframe(
-                        jobs[existing_cols],
+                        agg_jobs[['title', 'company', 'location', 'date_posted', 'job_url', 'site']],
                         column_config={
-                            url_col_name: st.column_config.LinkColumn("Direct URL"),
-                            "job_url": st.column_config.LinkColumn("Board Link", display_text="View Posting"),
-                            "emails": st.column_config.TextColumn("Emails"),
-                            "url_status": st.column_config.TextColumn("URL Status"),
+                            "job_url": st.column_config.LinkColumn("Apply Link", display_text="View Posting"),
                         },
                         use_container_width=True
                     )
-                    
-                    # CSV Download
-                    csv = jobs.to_csv(index=False).encode('utf-8')
-                    st.download_button(
-                        label="Download Results as CSV",
-                        data=csv,
-                        file_name='job_search_results.csv',
-                        mime='text/csv',
-                    )
-                    
             except Exception as e:
-                st.error(f"An error occurred during scraping: {e}")
+                st.error(f"Error scanning aggregators: {e}")
+
+    # Archived "Direct Portal Links" section
+    # st.divider()
+    # st.subheader("Direct Portal Links")
+    # ... (rest of the code is commented out or removed)

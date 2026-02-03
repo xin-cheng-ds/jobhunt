@@ -1,0 +1,75 @@
+ats_companies:
+- name: Databricks
+  url: https://boards.greenhouse.io/databricks
+  type: greenhouse
+- name: Anthropic
+  url: https://job-boards.greenhouse.io/anthropic
+  type: greenhouse
+- name: Scale AI
+  url: https://boards.greenhouse.io/scaleai
+  type: greenhouse
+- name: Figma
+  url: https://job-boards.greenhouse.io/figma
+  type: greenhouse
+- name: Waymo
+  url: https://boards.greenhouse.io/waymo
+  type: greenhouse
+- name: Ginkgo Bioworks
+  url: https://boards.greenhouse.io/ginkgobioworks
+  type: greenhouse
+- name: Captivateiq
+  url: https://jobs.lever.co/captivateiq
+  type: lever
+- name: A16z
+  url: https://boards.greenhouse.io/a16z
+  type: greenhouse
+- name: Stripe
+  url: https://boards.greenhouse.io/stripe
+  type: greenhouse
+- name: Upkeep
+  url: https://boards.greenhouse.io/upkeep
+  type: greenhouse
+- name: Airbnb
+  url: https://boards.greenhouse.io/airbnb
+  type: greenhouse
+- name: Sproutsocial
+  url: https://boards.greenhouse.io/sproutsocial
+  type: greenhouse
+- name: Harmonic
+  url: https://boards.greenhouse.io/harmonic
+  type: greenhouse
+- name: Eikontherapeutics
+  url: https://boards.greenhouse.io/eikontherapeutics
+  type: greenhouse
+monitor_companies:
+- name: OpenAI
+  url: https://openai.com/careers/search
+  type: generic
+  keywords:
+  - Research
+  - Member of Technical Staff
+- name: DeepMind
+  url: https://deepmind.google/discover/careers/jobs/
+  type: generic
+  keywords:
+  - Research Scientist
+  - Research Engineer
+aggregator_companies:
+- name: Boehringer Ingelheim
+  search_term: Boehringer Ingelheim
+  location: USA
+  keywords:
+  - Scientist
+  - Research
+- name: pfizer
+  search_term: pfizer
+  location: USA
+  keywords: []
+- name: jnj
+  search_term: jnj
+  location: USA
+  keywords: []
+- name: Johnson & Johnson
+  search_term: Johnson & Johnson
+  location: USA
+  keywords: []
