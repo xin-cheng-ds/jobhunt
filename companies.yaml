@@ -4,8 +4,7 @@ aggregator_companies:
   - Scientist
   - Research
 - name: pfizer
-  keywords:
-  - scientist
+  keywords: []
 - name: Johnson & Johnson
   keywords:
   - sales
