@@ -8,24 +8,40 @@ import yaml
 import company_monitor
 
 
-def build_linkedin_people_url(row):
-    """Build a LinkedIn people search URL from job title, company, and location."""
-    company = str(row.get('company', '') or '')
-    title = str(row.get('title', '') or '')
-    loc = str(row.get('location', '') or '')
-
-    if not company:
-        return None
-
-    keywords = f"{title} {company} {loc}".strip()
+def build_linkedin_url(keywords):
+    """Build a LinkedIn people search URL from keywords."""
     return f"https://www.linkedin.com/search/results/people/?keywords={quote(keywords)}"
 
 
-def add_linkedin_column(df):
-    """Add a linkedin_people column to a DataFrame with job results."""
+def add_linkedin_columns(df):
+    """Add LinkedIn people search columns to a DataFrame with job results."""
     if df.empty:
         return df
-    df['linkedin_people'] = df.apply(build_linkedin_people_url, axis=1)
+
+    def _recruiter(row):
+        company = str(row.get('company', '') or '')
+        loc = str(row.get('location', '') or '')
+        if not company:
+            return None
+        return build_linkedin_url(f"recruiter {company} {loc}".strip())
+
+    def _hiring_mgr(row):
+        company = str(row.get('company', '') or '')
+        loc = str(row.get('location', '') or '')
+        if not company:
+            return None
+        return build_linkedin_url(f"hiring manager {company} {loc}".strip())
+
+    def _team(row):
+        company = str(row.get('company', '') or '')
+        title = str(row.get('title', '') or '')
+        if not company:
+            return None
+        return build_linkedin_url(f"{title} {company}".strip())
+
+    df['find_recruiter'] = df.apply(_recruiter, axis=1)
+    df['find_manager'] = df.apply(_hiring_mgr, axis=1)
+    df['find_team'] = df.apply(_team, axis=1)
     return df
 
 def check_url(row):
@@ -184,8 +200,8 @@ with tab1:
                             jobs['source'] = 'Job Board'
 
                         # Add LinkedIn people search links
-                        jobs = add_linkedin_column(jobs)
-                        display_cols.append('linkedin_people')
+                        jobs = add_linkedin_columns(jobs)
+                        display_cols.extend(['find_recruiter', 'find_manager', 'find_team'])
 
                         existing_cols = [c for c in display_cols if c in jobs.columns]
 
@@ -193,7 +209,9 @@ with tab1:
                             jobs[existing_cols],
                             column_config={
                                 "job_url": st.column_config.LinkColumn("Apply Link", display_text="View Posting"),
-                                "linkedin_people": st.column_config.LinkColumn("Find People", display_text="Search LinkedIn"),
+                                "find_recruiter": st.column_config.LinkColumn("Recruiter", display_text="Search"),
+                                "find_manager": st.column_config.LinkColumn("Hiring Mgr", display_text="Search"),
+                                "find_team": st.column_config.LinkColumn("Team", display_text="Search"),
                             },
                             use_container_width=True
                         )
@@ -294,14 +312,16 @@ with tab2:
                             st.info("No jobs found matching your filters.")
                         else:
                             st.success(f"Found {len(agg_jobs)} jobs!")
-                            agg_jobs = add_linkedin_column(agg_jobs)
-                            display_cols = ['title', 'company', 'location', 'date_posted', 'job_url', 'site', 'linkedin_people']
+                            agg_jobs = add_linkedin_columns(agg_jobs)
+                            display_cols = ['title', 'company', 'location', 'date_posted', 'job_url', 'site', 'find_recruiter', 'find_manager', 'find_team']
                             existing_cols = [c for c in display_cols if c in agg_jobs.columns]
                             st.dataframe(
                                 agg_jobs[existing_cols],
                                 column_config={
                                     "job_url": st.column_config.LinkColumn("Apply Link", display_text="View Posting"),
-                                    "linkedin_people": st.column_config.LinkColumn("Find People", display_text="Search LinkedIn"),
+                                    "find_recruiter": st.column_config.LinkColumn("Recruiter", display_text="Search"),
+                                    "find_manager": st.column_config.LinkColumn("Hiring Mgr", display_text="Search"),
+                                    "find_team": st.column_config.LinkColumn("Team", display_text="Search"),
                                 },
                                 use_container_width=True
                             )
