@@ -216,7 +216,7 @@ with tab2:
     # --- New Aggregator Monitor Section ---
     st.divider()
     st.subheader("Active Company Monitoring (via Indeed/LinkedIn/Glassdoor)")
-    st.markdown("Use this to watch companies that don't have public ATS boards (e.g., Boehringer Ingelheim). We search job aggregators for them specifically.")
+    st.markdown("Use this to watch companies that don't have public ATS boards (e.g., Boehringer Ingelheim). We search job aggregators by company name. Use keywords to filter results to relevant roles.")
     
     # Display current monitored list as an editable table
     agg_companies = config.get('aggregator_companies', [])
@@ -224,7 +224,10 @@ with tab2:
     if not agg_companies:
         st.info("No companies configured. Add one below!")
 
-    df_agg = pd.DataFrame(agg_companies) if agg_companies else pd.DataFrame(columns=["name", "search_term", "location", "keywords"])
+    df_agg = pd.DataFrame(agg_companies) if agg_companies else pd.DataFrame(columns=["name", "location", "keywords"])
+    # Drop legacy search_term column if present
+    if 'search_term' in df_agg.columns:
+        df_agg = df_agg.drop(columns=['search_term'])
     if 'keywords' in df_agg.columns and not df_agg.empty:
         df_agg['keywords'] = df_agg['keywords'].apply(lambda x: ', '.join(x) if isinstance(x, list) else str(x))
     else:
@@ -234,9 +237,8 @@ with tab2:
         df_agg,
         column_config={
             "name": "Company Name",
-            "search_term": "Search Query",
             "location": "Location",
-            "keywords": "Highlight Keywords (comma sep)"
+            "keywords": "Filter Keywords (comma sep)"
         },
         use_container_width=True,
         num_rows="dynamic",
@@ -250,7 +252,6 @@ with tab2:
                 keywords_list = [k.strip() for k in str(row['keywords']).split(',') if k.strip()]
                 cleaned_companies.append({
                     "name": row['name'],
-                    "search_term": row['search_term'],
                     "location": row['location'],
                     "keywords": keywords_list
                 })

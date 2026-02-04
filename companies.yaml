@@ -41,6 +41,9 @@ ats_companies:
 - name: Eikontherapeutics
   url: https://boards.greenhouse.io/eikontherapeutics
   type: greenhouse
+- name: Alignerr
+  url: https://boards.greenhouse.io/alignerr
+  type: greenhouse
 monitor_companies:
 - name: OpenAI
   url: https://openai.com/careers/search
@@ -56,20 +59,16 @@ monitor_companies:
   - Research Engineer
 aggregator_companies:
 - name: Boehringer Ingelheim
-  search_term: Boehringer Ingelheim
   location: USA
   keywords:
   - Scientist
   - Research
 - name: pfizer
-  search_term: pfizer
   location: USA
   keywords: []
 - name: jnj
-  search_term: jnj
   location: USA
   keywords: []
 - name: Johnson & Johnson
-  search_term: Johnson & Johnson
   location: USA
   keywords: []

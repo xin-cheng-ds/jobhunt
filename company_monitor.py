@@ -35,21 +35,21 @@ def scrape_aggregator_companies(config_path="companies.yaml", hours_old=24):
 
     for company in agg_list:
         name = company.get('name')
-        term = company.get('search_term', name)
         loc = company.get('location', 'USA')
-        
+        keywords = company.get('keywords', [])
+
         logger.info(f"Scanning aggregators for {name}...")
         try:
-            # Scrape using JobSpy
+            # Scrape using JobSpy, use company name as the search query
             jobs = scrape_jobs(
                 site_name=["indeed", "linkedin", "glassdoor"],
-                search_term=term,
+                search_term=name,
                 location=loc,
                 results_wanted=20,  # Grab enough to filter
                 hours_old=hours_old,
                 country_indeed='USA',
             )
-            
+
             if not jobs.empty:
                 # Filter: Ensure the company column loosely matches our target
                 # This removes "Sales Rep selling TO Boehringer"
@@ -58,10 +58,17 @@ def scrape_aggregator_companies(config_path="companies.yaml", hours_old=24):
                     lambda c: not pd.isna(c) and name_lower in c.lower()
                 )].copy()
 
+                # Filter by keywords if provided
+                if keywords:
+                    kw_lower = [k.lower() for k in keywords]
+                    company_matches = company_matches[company_matches['title'].apply(
+                        lambda t: not pd.isna(t) and any(k in t.lower() for k in kw_lower)
+                    )]
+
                 # Add source metadata
                 company_matches['source'] = 'Aggregator Monitor'
                 company_matches['monitored_company'] = name
-                
+
                 all_jobs.append(company_matches)
                 
         except Exception as e:
