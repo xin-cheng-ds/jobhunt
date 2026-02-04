@@ -20,22 +20,20 @@ def load_config(config_path="companies.yaml"):
     except FileNotFoundError:
         return {}
 
-def scrape_aggregator_companies(config_path="companies.yaml", sites=None,
+def scrape_aggregator_companies(companies, sites=None,
                                 location="USA", hours_old=24,
                                 results_wanted=20, job_type=None,
                                 is_remote=False):
     """
-    Scrapes job aggregators for specific companies defined in config.
+    Scrapes job aggregators for specific companies.
+    companies: list of dicts with 'name' and optional 'keywords' keys.
     Search parameters (sites, location, etc.) come from the shared sidebar.
-    Keywords are per-company from the config.
     """
     if sites is None:
         sites = ["indeed", "linkedin", "glassdoor"]
-    config = load_config(config_path)
-    agg_list = config.get('aggregator_companies', [])
     all_jobs = []
 
-    for company in agg_list:
+    for company in companies:
         name = company.get('name')
         keywords = company.get('keywords', [])
 

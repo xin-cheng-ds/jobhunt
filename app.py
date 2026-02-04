@@ -241,29 +241,40 @@ with tab2:
         if not sites:
             st.error("Please select at least one site in the sidebar.")
         else:
-            with st.spinner("Scanning aggregators for target companies..."):
-                try:
-                    agg_jobs = company_monitor.scrape_aggregator_companies(
-                        sites=sites,
-                        location=location,
-                        hours_old=hours_old,
-                        results_wanted=max_results,
-                        job_type=job_types[0] if len(job_types) == 1 else None,
-                        is_remote=is_remote,
-                    )
+            # Build company list from the current table (no save needed)
+            companies_to_scan = []
+            for _, row in edited_df.iterrows():
+                if row['name']:
+                    keywords_list = [k.strip() for k in str(row['keywords']).split(',') if k.strip()]
+                    companies_to_scan.append({"name": row['name'], "keywords": keywords_list})
 
-                    if agg_jobs.empty:
-                        st.info("No jobs found matching your filters.")
-                    else:
-                        st.success(f"Found {len(agg_jobs)} jobs!")
-                        display_cols = ['title', 'company', 'location', 'date_posted', 'job_url', 'site']
-                        existing_cols = [c for c in display_cols if c in agg_jobs.columns]
-                        st.dataframe(
-                            agg_jobs[existing_cols],
-                            column_config={
-                                "job_url": st.column_config.LinkColumn("Apply Link", display_text="View Posting"),
-                            },
-                            use_container_width=True
+            if not companies_to_scan:
+                st.warning("No companies in the table to scan.")
+            else:
+                with st.spinner("Scanning aggregators for target companies..."):
+                    try:
+                        agg_jobs = company_monitor.scrape_aggregator_companies(
+                            companies=companies_to_scan,
+                            sites=sites,
+                            location=location,
+                            hours_old=hours_old,
+                            results_wanted=max_results,
+                            job_type=job_types[0] if len(job_types) == 1 else None,
+                            is_remote=is_remote,
                         )
-                except Exception as e:
-                    st.error(f"Error scanning aggregators: {e}")
+
+                        if agg_jobs.empty:
+                            st.info("No jobs found matching your filters.")
+                        else:
+                            st.success(f"Found {len(agg_jobs)} jobs!")
+                            display_cols = ['title', 'company', 'location', 'date_posted', 'job_url', 'site']
+                            existing_cols = [c for c in display_cols if c in agg_jobs.columns]
+                            st.dataframe(
+                                agg_jobs[existing_cols],
+                                column_config={
+                                    "job_url": st.column_config.LinkColumn("Apply Link", display_text="View Posting"),
+                                },
+                                use_container_width=True
+                            )
+                    except Exception as e:
+                        st.error(f"Error scanning aggregators: {e}")
