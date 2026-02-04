@@ -2,9 +2,31 @@ import streamlit as st
 from jobspy import scrape_jobs
 import pandas as pd
 import requests
+from urllib.parse import quote
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import yaml
 import company_monitor
+
+
+def build_linkedin_people_url(row):
+    """Build a LinkedIn people search URL from job title, company, and location."""
+    company = str(row.get('company', '') or '')
+    title = str(row.get('title', '') or '')
+    loc = str(row.get('location', '') or '')
+
+    if not company:
+        return None
+
+    keywords = f"{title} {company} {loc}".strip()
+    return f"https://www.linkedin.com/search/results/people/?keywords={quote(keywords)}"
+
+
+def add_linkedin_column(df):
+    """Add a linkedin_people column to a DataFrame with job results."""
+    if df.empty:
+        return df
+    df['linkedin_people'] = df.apply(build_linkedin_people_url, axis=1)
+    return df
 
 def check_url(row):
     """Check if the direct application URL returns a valid response."""
@@ -161,12 +183,17 @@ with tab1:
                         if 'source' not in jobs.columns:
                             jobs['source'] = 'Job Board'
 
+                        # Add LinkedIn people search links
+                        jobs = add_linkedin_column(jobs)
+                        display_cols.append('linkedin_people')
+
                         existing_cols = [c for c in display_cols if c in jobs.columns]
 
                         st.dataframe(
                             jobs[existing_cols],
                             column_config={
                                 "job_url": st.column_config.LinkColumn("Apply Link", display_text="View Posting"),
+                                "linkedin_people": st.column_config.LinkColumn("Find People", display_text="Search LinkedIn"),
                             },
                             use_container_width=True
                         )
@@ -267,12 +294,14 @@ with tab2:
                             st.info("No jobs found matching your filters.")
                         else:
                             st.success(f"Found {len(agg_jobs)} jobs!")
-                            display_cols = ['title', 'company', 'location', 'date_posted', 'job_url', 'site']
+                            agg_jobs = add_linkedin_column(agg_jobs)
+                            display_cols = ['title', 'company', 'location', 'date_posted', 'job_url', 'site', 'linkedin_people']
                             existing_cols = [c for c in display_cols if c in agg_jobs.columns]
                             st.dataframe(
                                 agg_jobs[existing_cols],
                                 column_config={
                                     "job_url": st.column_config.LinkColumn("Apply Link", display_text="View Posting"),
+                                    "linkedin_people": st.column_config.LinkColumn("Find People", display_text="Search LinkedIn"),
                                 },
                                 use_container_width=True
                             )
