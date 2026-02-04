@@ -2,6 +2,4 @@ streamlit==1.32.0
 python-jobspy==1.1.82
 pandas>=2.1.0
 requests>=2.31.0
-tls-client>=1.0.1
-markdownify>=0.13.1
 PyYAML>=6.0

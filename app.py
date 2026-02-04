@@ -68,20 +68,14 @@ with st.sidebar:
 tab1, tab2 = st.tabs(["Global Search", "Dream Company Watchlist"])
 
 with tab1:
-    st.markdown("Search **Indeed, LinkedIn, Glassdoor** AND your **ATS Targets** (Greenhouse/Lever) simultaneously.")
+    st.markdown("Search **Indeed, LinkedIn, Glassdoor, ZipRecruiter** simultaneously.")
 
     search_term = st.text_input(
         "Job Title / Keywords",
         value="research scientist",
         help="Enter multiple job titles separated by commas."
     )
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        include_ats = st.checkbox("Include ATS Targets", value=True, help="Also search companies listed in 'ats_companies' in companies.yaml")
-    with col2:
-        auto_add = st.checkbox("Auto-Add New Companies", value=True, help="Automatically add any Greenhouse/Lever companies found in search results to your monitoring list.")
-    with col3:
-        verify_links = st.checkbox("Verify Links", value=False, help="Check if the links are still valid (takes longer).")
+    verify_links = st.checkbox("Verify Links", value=False, help="Check if the links are still valid (takes longer).")
 
     # Main Search Logic
     if st.button("Search Jobs", type="primary", key="global_search_btn"):
@@ -118,16 +112,6 @@ with tab1:
                             except Exception as inner_e:
                                 st.warning(f"JobSpy error for {label}: {inner_e}")
 
-                    # 2. ATS Direct Search
-                    if include_ats:
-                        status_text.text("Scanning ATS Targets (Greenhouse/Lever)...")
-                        try:
-                            ats_results = company_monitor.scrape_ats_companies(keyword_filter=search_term)
-                            if not ats_results.empty:
-                                combined_results.append(ats_results)
-                        except Exception as e:
-                            st.warning(f"ATS Search Error: {e}")
-
                     status_text.empty()
 
                     if combined_results:
@@ -161,19 +145,6 @@ with tab1:
                                 url_df = pd.DataFrame(results).set_index('index')
                                 jobs['url_status'] = url_df['status']
                                 jobs['best_url'] = url_df['url_to_use'] # Store the real URL
-
-                        # 3. Auto-Discovery Logic (moved after verification to use better URLs)
-                        if auto_add:
-                            # Use the verified 'best_url' if available, otherwise fallback to 'job_url'
-                            # We create a temporary column to feed the detector
-                            jobs_for_discovery = jobs.copy()
-                            if 'best_url' in jobs_for_discovery.columns:
-                                # Prioritize best_url, fill missing with job_url
-                                jobs_for_discovery['job_url'] = jobs_for_discovery['best_url'].fillna(jobs_for_discovery['job_url'])
-
-                            new_count = company_monitor.auto_add_companies(jobs_for_discovery)
-                            if new_count > 0:
-                                st.toast(f"Auto-discovered {new_count} new ATS companies for your watchlist!")
 
                         display_cols = [
                             'title', 'company', 'location', 'date_posted', 'job_type',
