@@ -63,22 +63,25 @@ with st.sidebar:
 
     is_remote = st.checkbox("Remote Only", value=False)
 
-    st.markdown("---")
-    st.subheader("Global Search Options")
-    search_term = st.text_input(
-        "Job Title / Keywords",
-        value="research scientist",
-        help="Enter multiple job titles separated by commas."
-    )
-    include_ats = st.checkbox("Include ATS Targets", value=True, help="Also search companies listed in 'ats_companies' in companies.yaml")
-    auto_add = st.checkbox("Auto-Add New Companies", value=True, help="Automatically add any Greenhouse/Lever companies found in search results to your monitoring list.")
-    verify_links = st.checkbox("Verify Links", value=False, help="Check if the links are still valid (takes longer).")
 
 # Create Tabs
 tab1, tab2 = st.tabs(["Global Search", "Dream Company Watchlist"])
 
 with tab1:
     st.markdown("Search **Indeed, LinkedIn, Glassdoor** AND your **ATS Targets** (Greenhouse/Lever) simultaneously.")
+
+    search_term = st.text_input(
+        "Job Title / Keywords",
+        value="research scientist",
+        help="Enter multiple job titles separated by commas."
+    )
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        include_ats = st.checkbox("Include ATS Targets", value=True, help="Also search companies listed in 'ats_companies' in companies.yaml")
+    with col2:
+        auto_add = st.checkbox("Auto-Add New Companies", value=True, help="Automatically add any Greenhouse/Lever companies found in search results to your monitoring list.")
+    with col3:
+        verify_links = st.checkbox("Verify Links", value=False, help="Check if the links are still valid (takes longer).")
 
     # Main Search Logic
     if st.button("Search Jobs", type="primary", key="global_search_btn"):
