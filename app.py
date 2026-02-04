@@ -253,10 +253,14 @@ with tab2:
         df_agg['keywords'] = df_agg['keywords'].apply(lambda x: ', '.join(x) if isinstance(x, list) else str(x))
     else:
         df_agg['keywords'] = ""
+    # Add scan checkbox column (default checked)
+    if 'scan' not in df_agg.columns:
+        df_agg.insert(0, 'scan', True)
 
     edited_df = st.data_editor(
         df_agg,
         column_config={
+            "scan": st.column_config.CheckboxColumn("Scan", default=True),
             "name": "Company Name",
             "keywords": "Filter Keywords (comma sep)"
         },
@@ -268,7 +272,7 @@ with tab2:
     if st.button("Save Changes", type="primary", key="save_agg_changes"):
         cleaned_companies = []
         for _, row in edited_df.iterrows():
-            if row['name']:
+            if row.get('name'):
                 keywords_list = [k.strip() for k in str(row['keywords']).split(',') if k.strip()]
                 cleaned_companies.append({
                     "name": row['name'],
@@ -287,15 +291,15 @@ with tab2:
         if not sites:
             st.error("Please select at least one site in the sidebar.")
         else:
-            # Build company list from the current table (no save needed)
+            # Build company list from checked rows only
             companies_to_scan = []
             for _, row in edited_df.iterrows():
-                if row['name']:
+                if row.get('scan', True) and row['name']:
                     keywords_list = [k.strip() for k in str(row['keywords']).split(',') if k.strip()]
                     companies_to_scan.append({"name": row['name'], "keywords": keywords_list})
 
             if not companies_to_scan:
-                st.warning("No companies in the table to scan.")
+                st.warning("No companies selected to scan. Check the 'Scan' column for companies you want to include.")
             else:
                 with st.spinner("Scanning aggregators for target companies..."):
                     try:
