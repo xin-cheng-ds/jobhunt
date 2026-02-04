@@ -3,8 +3,8 @@ from jobspy import scrape_jobs
 import pandas as pd
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import company_monitor
 import yaml
+import company_monitor
 
 def check_url(row):
     """Check if the direct application URL returns a valid response."""
@@ -16,9 +16,7 @@ def check_url(row):
         result['status'] = 'Missing Link'
         return result
 
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
-    }
+    headers = company_monitor.DEFAULT_HEADERS
     
     try:
         # Use GET with stream=True to be more reliable than HEAD for some ATS
@@ -95,9 +93,11 @@ with tab1:
                     status_text = st.empty()
                     
                     # 1. JobSpy Search
+                    job_type_list = job_types if job_types else [None]
                     for term in search_terms:
-                        if not job_types:
-                            status_text.text(f"Scraping Job Boards for '{term}'...")
+                        for j_type in job_type_list:
+                            label = f"'{term}'" + (f" ({j_type})" if j_type else "")
+                            status_text.text(f"Scraping Job Boards for {label}...")
                             try:
                                 result = scrape_jobs(
                                     site_name=sites,
@@ -105,30 +105,13 @@ with tab1:
                                     location=location,
                                     results_wanted=max_results,
                                     hours_old=hours_old,
-                                    job_type=None,
+                                    job_type=j_type,
                                     is_remote=is_remote,
                                     country_indeed='USA',
                                 )
                                 combined_results.append(result)
                             except Exception as inner_e:
-                                st.warning(f"JobSpy error for '{term}': {inner_e}")
-                        else:
-                            for j_type in job_types:
-                                status_text.text(f"Scraping Job Boards for '{term}' ({j_type})...")
-                                try:
-                                    result = scrape_jobs(
-                                        site_name=sites,
-                                        search_term=term,
-                                        location=location,
-                                        results_wanted=max_results,
-                                        hours_old=hours_old,
-                                        job_type=j_type,
-                                        is_remote=is_remote,
-                                        country_indeed='USA',
-                                    )
-                                    combined_results.append(result)
-                                except Exception as inner_e:
-                                    st.warning(f"JobSpy error for '{term}' / type '{j_type}': {inner_e}")
+                                st.warning(f"JobSpy error for {label}: {inner_e}")
                     
                     # 2. ATS Direct Search
                     if include_ats:
@@ -226,12 +209,9 @@ with tab2:
     st.header("Dream Company Watchlist")
     
     # Load config first for all sections
-    config = {}
-    try:
-        with open("companies.yaml", "r") as f:
-            config = yaml.safe_load(f)
-    except Exception as e:
-        st.error(f"Could not load companies.yaml: {e}")
+    config = company_monitor.load_config()
+    if not config:
+        st.error("Could not load companies.yaml")
 
     # --- New Aggregator Monitor Section ---
     st.divider()
@@ -240,82 +220,47 @@ with tab2:
     
     # Display current monitored list as an editable table
     agg_companies = config.get('aggregator_companies', [])
-    
-    if agg_companies:
-        df_agg = pd.DataFrame(agg_companies)
-        # Convert list of keywords to comma-separated string for editing
-        if 'keywords' in df_agg.columns:
-            df_agg['keywords'] = df_agg['keywords'].apply(lambda x: ', '.join(x) if isinstance(x, list) else str(x))
-        else:
-            df_agg['keywords'] = ""
 
-        edited_df = st.data_editor(
-            df_agg,
-            column_config={
-                "name": "Company Name",
-                "search_term": "Search Query",
-                "location": "Location",
-                "keywords": "Highlight Keywords (comma sep)"
-            },
-            use_container_width=True,
-            num_rows="dynamic", # Allow adding/deleting rows
-            key="agg_editor"
-        )
-        
-        if st.button("Save Changes", type="primary", key="save_agg_changes"):
-            # Convert back to list format and save
-            cleaned_companies = []
-            for index, row in edited_df.iterrows():
-                if row['name']: # specific check to ensure empty rows aren't saved
-                    keywords_list = [k.strip() for k in str(row['keywords']).split(',') if k.strip()]
-                    cleaned_companies.append({
-                        "name": row['name'],
-                        "search_term": row['search_term'],
-                        "location": row['location'],
-                        "keywords": keywords_list
-                    })
-            
-            config['aggregator_companies'] = cleaned_companies
-            with open("companies.yaml", "w") as f:
-                yaml.dump(config, f, sort_keys=False)
-            
-            st.toast("Watchlist updated successfully!", icon="💾")
-            st.rerun()
-
-    else:
+    if not agg_companies:
         st.info("No companies configured. Add one below!")
-        # Initialize empty df for the editor if list is empty, so user can add rows
-        empty_df = pd.DataFrame(columns=["name", "search_term", "location", "keywords"])
-        edited_df = st.data_editor(
-            empty_df,
-            column_config={
-                "name": "Company Name",
-                "search_term": "Search Query",
-                "location": "Location",
-                "keywords": "Highlight Keywords (comma sep)"
-            },
-            use_container_width=True,
-            num_rows="dynamic",
-            key="agg_editor_empty"
-        )
-        if st.button("Save Changes", type="primary", key="save_agg_changes_empty"):
-             # Convert back to list format and save
-            cleaned_companies = []
-            for index, row in edited_df.iterrows():
-                if row['name']:
-                    keywords_list = [k.strip() for k in str(row['keywords']).split(',') if k.strip()]
-                    cleaned_companies.append({
-                        "name": row['name'],
-                        "search_term": row['search_term'],
-                        "location": row['location'],
-                        "keywords": keywords_list
-                    })
-            
-            config['aggregator_companies'] = cleaned_companies
-            with open("companies.yaml", "w") as f:
-                yaml.dump(config, f, sort_keys=False)
-            st.toast("Watchlist updated successfully!", icon="💾")
-            st.rerun()
+
+    df_agg = pd.DataFrame(agg_companies) if agg_companies else pd.DataFrame(columns=["name", "search_term", "location", "keywords"])
+    if 'keywords' in df_agg.columns and not df_agg.empty:
+        df_agg['keywords'] = df_agg['keywords'].apply(lambda x: ', '.join(x) if isinstance(x, list) else str(x))
+    else:
+        df_agg['keywords'] = ""
+
+    edited_df = st.data_editor(
+        df_agg,
+        column_config={
+            "name": "Company Name",
+            "search_term": "Search Query",
+            "location": "Location",
+            "keywords": "Highlight Keywords (comma sep)"
+        },
+        use_container_width=True,
+        num_rows="dynamic",
+        key="agg_editor"
+    )
+
+    if st.button("Save Changes", type="primary", key="save_agg_changes"):
+        cleaned_companies = []
+        for _, row in edited_df.iterrows():
+            if row['name']:
+                keywords_list = [k.strip() for k in str(row['keywords']).split(',') if k.strip()]
+                cleaned_companies.append({
+                    "name": row['name'],
+                    "search_term": row['search_term'],
+                    "location": row['location'],
+                    "keywords": keywords_list
+                })
+
+        config['aggregator_companies'] = cleaned_companies
+        with open("companies.yaml", "w") as f:
+            yaml.dump(config, f, sort_keys=False)
+
+        st.toast("Watchlist updated successfully!", icon="💾")
+        st.rerun()
 
 
     if st.button("Scan Aggregators Now", type="secondary", key="agg_monitor_btn"):
@@ -337,7 +282,3 @@ with tab2:
             except Exception as e:
                 st.error(f"Error scanning aggregators: {e}")
 
-    # Archived "Direct Portal Links" section
-    # st.divider()
-    # st.subheader("Direct Portal Links")
-    # ... (rest of the code is commented out or removed)

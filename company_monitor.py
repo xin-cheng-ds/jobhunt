@@ -12,6 +12,12 @@ from jobspy import scrape_jobs
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+DEFAULT_HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+    'Accept-Language': 'en-US,en;q=0.5',
+}
+
 def load_config(config_path="companies.yaml"):
     try:
         with open(config_path, "r") as f:
@@ -47,16 +53,11 @@ def scrape_aggregator_companies(config_path="companies.yaml", hours_old=24):
             if not jobs.empty:
                 # Filter: Ensure the company column loosely matches our target
                 # This removes "Sales Rep selling TO Boehringer"
-                # We normalize both to lower case for comparison
-                
-                # Helper to check if target name is in the result company name
-                def is_match(row_company):
-                    if pd.isna(row_company): return False
-                    return name.lower() in row_company.lower()
-                
-                # Apply filter
-                company_matches = jobs[jobs['company'].apply(is_match)]
-                
+                name_lower = name.lower()
+                company_matches = jobs[jobs['company'].apply(
+                    lambda c: not pd.isna(c) and name_lower in c.lower()
+                )].copy()
+
                 # Add source metadata
                 company_matches['source'] = 'Aggregator Monitor'
                 company_matches['monitored_company'] = name
@@ -73,13 +74,8 @@ def scrape_aggregator_companies(config_path="companies.yaml", hours_old=24):
 def scrape_greenhouse(company_name, url):
     """Scrapes Greenhouse.io job boards (supports both HTML and new React/JSON structure)."""
     jobs = []
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
-    }
     try:
-        response = requests.get(url, headers=headers, timeout=15)
+        response = requests.get(url, headers=DEFAULT_HEADERS, timeout=15)
         if response.status_code != 200:
             logger.error(f"Failed to fetch {url}: Status {response.status_code}")
             return jobs
@@ -152,13 +148,8 @@ def scrape_greenhouse(company_name, url):
 def scrape_lever(company_name, url):
     """Scrapes Lever.co job boards."""
     jobs = []
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
-    }
     try:
-        response = requests.get(url, headers=headers, timeout=15)
+        response = requests.get(url, headers=DEFAULT_HEADERS, timeout=15)
         if response.status_code != 200:
             logger.error(f"Failed to fetch {url}: Status {response.status_code}")
             return jobs
@@ -249,78 +240,6 @@ def scrape_ats_companies(config_path="companies.yaml", keyword_filter=None):
                 
     return pd.DataFrame(all_jobs)
 
-def scrape_search_query(company_name, base_url, query_param, keywords):
-    """
-    Scraper for sites that use URL parameters for search.
-    """
-    jobs = []
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    }
-
-    for keyword in keywords:
-        try:
-            params = {query_param: keyword}
-            req = requests.Request('GET', base_url, params=params, headers=headers)
-            prepped = req.prepare()
-            search_url = prepped.url
-            
-            jobs.append({
-                'company': company_name,
-                'title': f"Search: {keyword}",
-                'location': 'Check Site',
-                'job_url': search_url,
-                'source': 'Direct Search'
-            })
-                
-        except Exception as e:
-            logger.error(f"Error constructing search query for {company_name}: {e}")
-            
-    return jobs
-
-def scrape_generic(company_name, url, keywords):
-    """Generic scraper checking for keywords on page."""
-    jobs = []
-    try:
-        response = requests.get(url, timeout=10)
-        if response.status_code == 200:
-             # Just return the link as a potential match if it loads
-             # Deep content analysis is slow and error prone for generic sites
-             jobs.append({
-                'company': company_name,
-                'title': f"Potential Match (Check Page)",
-                'location': 'Check Site',
-                'job_url': url,
-                'source': 'Generic Monitor'
-            })
-    except:
-        pass
-    return jobs
-
-def monitor_watchlist(config_path="companies.yaml"):
-    """
-    Generates links for the 'monitor_companies' watchlist.
-    Does not do heavy scraping, just link generation and basic health check.
-    """
-    config = load_config(config_path)
-    monitor_list = config.get('monitor_companies', [])
-    all_jobs = []
-    
-    for company in monitor_list:
-        name = company.get('name')
-        url = company.get('url')
-        ctype = company.get('type', 'generic').lower()
-        
-        if ctype == 'search_query':
-            q_param = company.get('query_param', 'q')
-            keywords = company.get('keywords', [])
-            all_jobs.extend(scrape_search_query(name, url, q_param, keywords))
-        else:
-            keywords = company.get('keywords', [])
-            all_jobs.extend(scrape_generic(name, url, keywords))
-            
-    return pd.DataFrame(all_jobs)
-
 def extract_ats_identifier(job_url):
     """
     Analyzes a job URL to see if it belongs to a supported ATS.
@@ -365,12 +284,8 @@ def extract_ats_identifier(job_url):
     # Only try this if Strategy 1 failed and it looks like a corporate site (http)
     if job_url.startswith("http"):
         try:
-            # logger.info(f"Scanning content for ATS link: {job_url}")
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            }
             # Fast timeout, don't hang on this
-            response = requests.get(job_url, headers=headers, timeout=5)
+            response = requests.get(job_url, headers=DEFAULT_HEADERS, timeout=5)
             if response.status_code == 200:
                 content = response.text
                 
@@ -421,15 +336,11 @@ def discover_ats_by_name(company_name):
         candidates.append((f"https://boards.greenhouse.io/{t}", "greenhouse"))
         candidates.append((f"https://job-boards.greenhouse.io/{t}", "greenhouse"))
         candidates.append((f"https://jobs.lever.co/{t}", "lever"))
-    
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    }
-    
+
     for url, ats_type in candidates:
         try:
             # fast head check
-            response = requests.head(url, headers=headers, timeout=2, allow_redirects=True)
+            response = requests.head(url, headers=DEFAULT_HEADERS, timeout=2, allow_redirects=True)
             if response.status_code == 200:
                 # Double check content type to ensure it's not a generic error page
                 ct = response.headers.get('Content-Type', '').lower()
