@@ -25,28 +25,36 @@ def load_config(config_path="companies.yaml"):
     except FileNotFoundError:
         return {}
 
-def scrape_aggregator_companies(config_path="companies.yaml", hours_old=24):
+def scrape_aggregator_companies(config_path="companies.yaml", sites=None,
+                                location="USA", hours_old=24,
+                                results_wanted=20, job_type=None,
+                                is_remote=False):
     """
-    Scrapes job aggregators (Indeed, LinkedIn, Glassdoor) for specific companies.
+    Scrapes job aggregators for specific companies defined in config.
+    Search parameters (sites, location, etc.) come from the shared sidebar.
+    Keywords are per-company from the config.
     """
+    if sites is None:
+        sites = ["indeed", "linkedin", "glassdoor"]
     config = load_config(config_path)
     agg_list = config.get('aggregator_companies', [])
     all_jobs = []
 
     for company in agg_list:
         name = company.get('name')
-        loc = company.get('location', 'USA')
         keywords = company.get('keywords', [])
 
         logger.info(f"Scanning aggregators for {name}...")
         try:
             # Scrape using JobSpy, use company name as the search query
             jobs = scrape_jobs(
-                site_name=["indeed", "linkedin", "glassdoor"],
+                site_name=sites,
                 search_term=name,
-                location=loc,
-                results_wanted=20,  # Grab enough to filter
+                location=location,
+                results_wanted=results_wanted,
                 hours_old=hours_old,
+                job_type=job_type,
+                is_remote=is_remote,
                 country_indeed='USA',
             )
 

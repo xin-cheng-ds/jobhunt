@@ -59,16 +59,12 @@ monitor_companies:
   - Research Engineer
 aggregator_companies:
 - name: Boehringer Ingelheim
-  location: USA
   keywords:
   - Scientist
   - Research
 - name: pfizer
-  location: USA
-  keywords: []
-- name: jnj
-  location: USA
-  keywords: []
+  keywords:
+  - data scientist
 - name: Johnson & Johnson
-  location: USA
-  keywords: []
+  keywords:
+  - sales
