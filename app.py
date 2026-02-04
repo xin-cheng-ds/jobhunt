@@ -187,7 +187,7 @@ with tab1:
                         display_cols = [
                             'title', 'company', 'location', 'date_posted', 'job_type',
                             'interval', 'min_amount', 'max_amount', 'is_remote',
-                            'emails', 'site', 'job_url', 'source'
+                            'emails', 'site', 'job_url', 'job_url_direct', 'source'
                         ]
 
                         if verify_links and 'url_status' in jobs.columns:
@@ -208,7 +208,8 @@ with tab1:
                         st.dataframe(
                             jobs[existing_cols],
                             column_config={
-                                "job_url": st.column_config.LinkColumn("Apply Link", display_text="View Posting"),
+                                "job_url": st.column_config.LinkColumn("Job Board", display_text="View Posting"),
+                                "job_url_direct": st.column_config.LinkColumn("Direct Link", display_text="Apply Direct"),
                                 "find_recruiter": st.column_config.LinkColumn("Recruiter", display_text="Search"),
                                 "find_manager": st.column_config.LinkColumn("Hiring Mgr", display_text="Search"),
                                 "find_team": st.column_config.LinkColumn("Team", display_text="Search"),
